@@ -12,7 +12,7 @@ go get [github.com/joho/godotenv](https://github.com/joho/godotenv)
 go get [github.com/gorilla/websocket](https://github.com/gorilla/websocket)
 
 # Configuration
-You must create a .env file in the same directory as the Go application with the following environment variables.
+You must create a .env file in the project root with the following environment variables.
 
 ```Bash
 # Your Twitch username
@@ -23,6 +23,9 @@ TWITCH_TOKEN="your_user_token"
 
 # Your Twitch Client ID. Found in the Twitch Dev Console.
 TWITCH_CLIENT_ID="your_client_id"
+
+# Your App Access Token for EventSub API requests
+TWITCH_APP_ACCESS_TOKEN="your_app_access_token"
 
 # The Twitch channel you want to join (e.g., #twitch)
 TWITCH_CHANNEL="#your_channel_name"
@@ -75,6 +78,15 @@ Alternatively, you can use a third-party tool like Twitch User ID Converter to f
 Once you have created your .env file and filled in all the credentials, you can run the application by navigating to the project directory in your terminal and executing:
 
 ```Bash
-go run .
+go run ./cmd/twitch-go
 ```
 
+## Project Structure
+
+The codebase is organized into clear packages:
+
+- cmd/twitch-go: Application entrypoint (main)
+- internal/config: Environment loading and validation
+- internal/chat: IRC chat connection and parsing
+- internal/eventsub: EventSub WebSocket and subscriptions
+- internal/colors: Shared terminal color constants
