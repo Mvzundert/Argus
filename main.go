@@ -27,7 +27,7 @@ var NICK string
 // Your Twitch OAuth token. Get one from the Twitch Dev Console with required scopes.
 var OAUTH_TOKEN string
 
-// Your Twitch Client ID. Found in the Twitch Dev Console.
+// Your Twitch Client ID.
 var CLIENT_ID string
 
 // Your Twitch App Access Token. Get one for your application to make API calls.
@@ -53,6 +53,9 @@ const (
 	ColorReset        = "\033[0m"
 	ColorRed          = "\033[31m"
 	ColorTwitchPurple = "\033[38;2;145;70;255m" // Custom color for Twitch Purple
+	ColorWhite        = "\033[97m"
+	ColorPurple       = "\033[35m"
+	ColorCyan         = "\033[36m"
 )
 
 // A regular expression to parse the username and message from an IRC PRIVMSG.
@@ -63,6 +66,7 @@ var ircTagRegex = regexp.MustCompile(`^@([^ ]+) `)
 
 // Channel IDs for PubSub topics. You need the user ID, not the name.
 var CHANNEL_ID string
+var SHOW_LOGS bool
 
 func main() {
 	// Load environment variables from the .env file.
@@ -78,6 +82,7 @@ func main() {
 	CHANNEL_ID = os.Getenv("TWITCH_CHANNEL_ID")
 	CLIENT_ID = os.Getenv("TWITCH_CLIENT_ID")
 	APP_ACCESS_TOKEN = os.Getenv("TWITCH_APP_ACCESS_TOKEN")
+	SHOW_LOGS = os.Getenv("SHOW_LOGS") == "true"
 
 	var missingVars []string
 	if NICK == "" {
@@ -193,7 +198,9 @@ func parseTags(tagString string) map[string]string {
 
 func connectToEventSub() {
 	u := url.URL{Scheme: "wss", Host: "eventsub.wss.twitch.tv", Path: "/ws"}
-	log.Printf("Connecting to EventSub at %s", u.String())
+	if SHOW_LOGS {
+		log.Printf("Connecting to EventSub at %s", u.String())
+	}
 
 	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
@@ -208,50 +215,70 @@ func connectToEventSub() {
 		for {
 			_, message, err := conn.ReadMessage()
 			if err != nil {
-				log.Println("Read error:", err)
+				if SHOW_LOGS {
+					log.Println("Read error:", err)
+				}
 				return
 			}
 			var msg map[string]interface{}
 			if err := json.Unmarshal(message, &msg); err != nil {
-				log.Println("JSON unmarshal error:", err)
+				if SHOW_LOGS {
+					log.Println("JSON unmarshal error:", err)
+				}
 				continue
 			}
 
 			metadata, ok := msg["metadata"].(map[string]any)
 			if !ok {
-				log.Println("metadata not found in message")
+				if SHOW_LOGS {
+					log.Println("metadata not found in message")
+				}
 				continue
 			}
 
 			messageType, ok := metadata["message_type"].(string)
 			if !ok {
-				log.Println("message_type not found in metadata")
+				if SHOW_LOGS {
+					log.Println("message_type not found in metadata")
+				}
 				continue
 			}
 
 			switch messageType {
 			case "session_welcome":
 				sessionID := msg["payload"].(map[string]any)["session"].(map[string]any)["id"].(string)
-				log.Println("Received session welcome. Session ID:", sessionID)
+				if SHOW_LOGS {
+					log.Println("Received session welcome. Session ID:", sessionID)
+				}
 				subscribeToEvents(sessionID)
 			case "session_keepalive":
-				//log.Println("Received keepalive message.")
+				if SHOW_LOGS {
+					log.Println("Received keepalive message.")
+				}
 			case "notification":
 				handleEventSubNotification(msg)
 			case "revocation":
-				log.Println("Received revocation. Session revoked.")
+				if SHOW_LOGS {
+					log.Println("Received revocation. Session revoked.")
+				}
 				return
 			case "session_reconnect":
-				log.Println("Received reconnect message. Disconnecting and reconnecting...")
+				if SHOW_LOGS {
+					log.Println("Received reconnect message. Disconnecting and reconnecting...")
+				}
 				return
 			default:
-				log.Printf("Received unhandled message type: %s", messageType)
+				if SHOW_LOGS {
+					log.Printf("Received unhandled message type: %s", messageType)
+				}
 			}
 		}
 	}()
 
 	<-done
-	log.Println("EventSub connection closed.")
+	if SHOW_LOGS {
+		log.Println("EventSub connection closed.")
+	}
 }
 
 func subscribeToEvents(sessionID string) {
@@ -271,14 +298,18 @@ func subscribeToEvents(sessionID string) {
 
 		jsonData, err := json.Marshal(data)
 		if err != nil {
-			log.Printf("Error marshalling JSON for %s: %v", eventType, err)
+			if SHOW_LOGS {
+				log.Printf("Error marshalling JSON for %s: %v", eventType, err)
+			}
 			continue
 		}
 
 		client := &http.Client{}
 		req, err := http.NewRequest("POST", API_URL, bytes.NewBuffer(jsonData))
 		if err != nil {
-			log.Printf("Error creating request for %s: %v", eventType, err)
+			if SHOW_LOGS {
+				log.Printf("Error creating request for %s: %v", eventType, err)
+			}
 			continue
 		}
 
@@ -288,21 +319,29 @@ func subscribeToEvents(sessionID string) {
 
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Printf("Error making request for %s: %v", eventType, err)
+			if SHOW_LOGS {
+				log.Printf("Error making request for %s: %v", eventType, err)
+			}
 			continue
 		}
 		defer resp.Body.Close()
 
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Printf("Error reading response body for %s: %v", eventType, err)
+			if SHOW_LOGS {
+				log.Printf("Error reading response body for %s: %v", eventType, err)
+			}
 			continue
 		}
 
 		if resp.StatusCode == http.StatusAccepted || resp.StatusCode == http.StatusOK {
-			log.Printf("Successfully subscribed to %s", eventType)
+			if SHOW_LOGS {
+				log.Printf("Successfully subscribed to %s", eventType)
+			}
 		} else {
-			log.Printf("Failed to subscribe to %s. Status: %s, Body: %s", eventType, resp.Status, string(bodyBytes))
+			if SHOW_LOGS {
+				log.Printf("Failed to subscribe to %s. Status: %s, Body: %s", eventType, resp.Status, string(bodyBytes))
+			}
 		}
 	}
 	fmt.Println("Application is now ready to receive events.")
@@ -326,15 +365,15 @@ func handleEventSubNotification(msg map[string]interface{}) {
 	switch eventType {
 	case "channel.subscribe":
 		username := event["user_name"].(string)
-		fmt.Printf(" [ACTVITY] New Subscriber: %s!\n", username)
+		fmt.Printf("%s [ACTIVITY] New Subscriber: %s!%s\n", ColorWhite, username, ColorReset)
 	case "channel.cheer":
 		username := event["user_name"].(string)
 		bitsAmount := event["bits"].(float64)
-		fmt.Printf(" [ACTVITY] %s cheered %d bits!\n", username, int(bitsAmount))
+		fmt.Printf("%s [ACTIVITY] %s cheered %d bits!%s\n", ColorPurple, username, int(bitsAmount), ColorReset)
 	case "channel.channel_points_custom_reward_redemption.add":
 		username := event["user_name"].(string)
 		rewardTitle := event["reward"].(map[string]any)["title"].(string)
-		fmt.Printf(" [ACTVITY] %s redeemed channel points for: %s\n", username, rewardTitle)
+		rewardCost := event["reward"].(map[string]any)["cost"].(float64)
+		fmt.Printf("%s [ACTIVITY] %s redeemed %d channel points for: %s%s\n", ColorCyan, username, int(rewardCost), rewardTitle, ColorReset)
 	}
 }
-
