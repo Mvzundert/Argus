@@ -130,14 +130,15 @@ func connectToIRC() {
 
 	reader := bufio.NewReader(conn)
 
+	// Request IRCv3 tags capability to get user badges.
+	fmt.Fprintf(conn, "CAP REQ :twitch.tv/tags\r\n")
+	// The IRC connection requires the `oauth:` prefix.
+	fmt.Fprintf(conn, "PASS oauth:%s\r\n", OAUTH_TOKEN)
+	fmt.Fprintf(conn, "NICK %s\r\n", NICK)
+	fmt.Fprintf(conn, "JOIN %s\r\n", CHANNEL)
+
 	if SHOW_LOGS {
 		fmt.Println("-------------------- Twitch Chat --------------------")
-		// Request IRCv3 tags capability to get user badges.
-		fmt.Fprintf(conn, "CAP REQ :twitch.tv/tags\r\n")
-		// The IRC connection requires the `oauth:` prefix.
-		fmt.Fprintf(conn, "PASS oauth:%s\r\n", OAUTH_TOKEN)
-		fmt.Fprintf(conn, "NICK %s\r\n", NICK)
-		fmt.Fprintf(conn, "JOIN %s\r\n", CHANNEL)
 		log.Printf("Joined IRC channel %s", CHANNEL)
 		fmt.Println("-------------------------------------------------")
 	} else {
