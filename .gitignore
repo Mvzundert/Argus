@@ -50,3 +50,7 @@ nbproject/
 auth.json
 .env
 .env.encrypted
+
+# Project files #
+################
+scratch.*
