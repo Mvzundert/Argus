@@ -34,7 +34,7 @@ TWITCH_CHANNEL_ID="your_channel_id"
 # Getting Your Credentials
 You need to obtain three pieces of information to configure the application: your User Access Token, your Client ID, and your Twitch Channel ID.
 
-1. Getting Your User Access Token
+## 1. Getting Your User Access Token
 This token is for reading chat messages and is specific to your user account. Do not share your Client Secret with any third-party service. The most secure way to get this token is by using Twitch's official Implicit Grant Flow.
 
 Register a new application in the Twitch Developer Console.
@@ -49,7 +49,7 @@ Open the following URL in your web browser, replacing YOUR_CLIENT_ID with the ID
 
 After you authorize the application, your browser will be redirected to http://localhost. The token will be in the address bar's URL fragment. Copy the entire token string and paste it into the TWITCH_TOKEN variable in your .env file. Do not include the oauth: prefix.
 
-2. Getting Your App Access Token
+## 2. Getting Your App Access Token
 This token is for your application to make API calls to create EventSub subscriptions. You will need your Client ID and Client Secret for this.
 
 Find your Client ID and Client Secret in the Twitch Developer Console for the application you registered.
@@ -64,7 +64,7 @@ curl -X POST '[https://id.twitch.tv/oauth2/token](https://id.twitch.tv/oauth2/to
 
 The response will be a JSON object containing your access_token. Copy this token and paste it into the TWITCH_APP_ACCESS_TOKEN variable in your .env file.
 
-3. Getting Your Twitch Channel ID
+## 3. Getting Your Twitch Channel ID
 The EventSub API requires your Twitch Channel ID (a number), not your channel's name.
 
 You can find your channel ID by visiting your Twitch profile URL and copying the numbers after ```bash https://www.twitch.tv/directory/game/```
