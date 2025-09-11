@@ -130,14 +130,19 @@ func connectToIRC() {
 
 	reader := bufio.NewReader(conn)
 
-	fmt.Println("-------------------- Twitch Chat --------------------")
-	// Request IRCv3 tags capability to get user badges.
-	fmt.Fprintf(conn, "CAP REQ :twitch.tv/tags\r\n")
-	// The IRC connection requires the `oauth:` prefix.
-	fmt.Fprintf(conn, "PASS oauth:%s\r\n", OAUTH_TOKEN)
-	fmt.Fprintf(conn, "NICK %s\r\n", NICK)
-	fmt.Fprintf(conn, "JOIN %s\r\n", CHANNEL)
-	log.Printf("Joined IRC channel %s", CHANNEL)
+	if SHOW_LOGS {
+		fmt.Println("-------------------- Twitch Chat --------------------")
+		// Request IRCv3 tags capability to get user badges.
+		fmt.Fprintf(conn, "CAP REQ :twitch.tv/tags\r\n")
+		// The IRC connection requires the `oauth:` prefix.
+		fmt.Fprintf(conn, "PASS oauth:%s\r\n", OAUTH_TOKEN)
+		fmt.Fprintf(conn, "NICK %s\r\n", NICK)
+		fmt.Fprintf(conn, "JOIN %s\r\n", CHANNEL)
+		log.Printf("Joined IRC channel %s", CHANNEL)
+		fmt.Println("-------------------------------------------------")
+	} else {
+		log.Printf("CLI active for channel %s", CHANNEL)
+	}
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -344,11 +349,15 @@ func subscribeToEvents(sessionID string) {
 			}
 		}
 	}
-	fmt.Println("Application is now ready to receive events.")
+
+	if SHOW_LOGS {
+		fmt.Println("----------------- Activity Feed -----------------")
+		fmt.Println("Application is now ready to receive events.")
+		fmt.Println("-------------------------------------------------")
+	}
 }
 
 func handleEventSubNotification(msg map[string]interface{}) {
-	fmt.Println("----------------- Activity Feed -----------------")
 	payload, ok := msg["payload"].(map[string]any)
 	if !ok {
 		return
