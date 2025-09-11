@@ -44,7 +44,7 @@ Register a new application in the **[Twitch Developer Console](https://dev.twitc
 3. Open the following URL in your web browser, replacing YOUR_CLIENT_ID with the ID of the application you just registered:
 
 ```Bash
-https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=YOUR_CLIENT_ID&redirect_uri=http://localhost&scope=chat%3Aread
+https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=YOUR_CLIENT_ID&redirect_uri=http://localhost&scope=chat%3Aread%20channel%3Aread%3Asubscriptions%20bits%3Aread%20channel%3Aread%3Aredemptions
 ```
 
 4. After you authorize the application, your browser will be redirected to http://localhost, and the token will be in the address bar. Copy the entire token, including the oauth: prefix.
