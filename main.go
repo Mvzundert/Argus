@@ -358,7 +358,7 @@ func subscribeToEvents(sessionID string) {
 	}
 }
 
-func handleEventSubNotification(msg map[string]interface{}) {
+func handleEventSubNotification(msg map[string]any) {
 	payload, ok := msg["payload"].(map[string]any)
 	if !ok {
 		return
