@@ -2,69 +2,73 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
-	"os/signal"
-
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
-
-	//"os/signal"
+	"os/signal"
 	"regexp"
 	"strings"
 	"syscall"
-	"time"
 
-	//	"github.com/gorilla/websocket"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 )
 
 // --- Configuration ---
-// This application now uses a .env file to load configuration.
-// Please create a file named .env in the same directory as this script
-// and fill it with your credentials. See the example.env file provided.
+// Your Twitch username or a guest account. "justinfan123" is a valid guest.
+var NICK string
 
-var (
-	// Your Twitch username or a guest account. "justinfan123" is a valid guest.
-	NICK string
-	// Your Twitch OAuth token. Get one from https://dev.twitch.tv/console.
-	OAUTH_TOKEN string
-	// The channel to connect to, including the # prefix.
-	CHANNEL string
+// Your Twitch OAuth token. Get one from the Twitch Dev Console with required scopes.
+var OAUTH_TOKEN string
+
+// Your Twitch Client ID. Found in the Twitch Dev Console.
+var CLIENT_ID string
+
+// Your Twitch App Access Token. Get one for your application to make API calls.
+var APP_ACCESS_TOKEN string
+
+// The channel to connect to, including the # prefix.
+var CHANNEL string
+
+// Twitch EventSub configuration.
+const (
+	EVENTSUB_URL = "wss://eventsub.wss.twitch.tv/ws"
+	API_URL      = "https://api.twitch.tv/helix/eventsub/subscriptions"
 )
 
-// Configuration for the activity feed.
+// --- IRC Chat Configuration ---
 const (
-	PUBSUB_URL           = "wss://pubsub-edge.twitch.tv"
-	PUBSUB_TOPIC_SUB     = "channel-subscribe-events-v1.%s"
-	PUBSUB_TOPIC_BITS    = "channel-bits-events-v2.%s"
-	PUBSUB_TOPIC_POINTS  = "channel-points-channel-v1.%s"
-	PUBSUB_PING_INTERVAL = 4 * time.Minute
+	IRC_SERVER = "irc.chat.twitch.tv"
+	IRC_PORT   = "6667"
 )
 
-// Configuration for irc chat
+// ANSI escape codes for coloring terminal output.
 const (
-	SERVER = "irc.chat.twitch.tv"
-	PORT   = "6667"
+	ColorReset        = "\033[0m"
+	ColorRed          = "\033[31m"
+	ColorTwitchPurple = "\033[38;2;145;70;255m" // Custom color for Twitch Purple
 )
 
 // A regular expression to parse the username and message from an IRC PRIVMSG.
 var chatMessageRegex = regexp.MustCompile(`^:(\w+)!.*?PRIVMSG #\w+ :(.+)$`)
 
-// A regular expression to extract user ID from the response.
-var userIDRegex = regexp.MustCompile(`^@.*user-id=(\d+).*$`)
+// A regular expression to extract IRC tags.
+var ircTagRegex = regexp.MustCompile(`^@([^ ]+) `)
 
-// Channel IDs are for the Pub Sub topics, you need the ID and not the name.
+// Channel IDs for PubSub topics. You need the user ID, not the name.
 var CHANNEL_ID string
 
 func main() {
 	// Load environment variables from the .env file.
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("Note: No .env file found.")
+		log.Println("Note: No .env file found. Falling back to system environment variables.")
 	}
 
 	// Read values from the environment.
@@ -72,85 +76,135 @@ func main() {
 	OAUTH_TOKEN = os.Getenv("TWITCH_TOKEN")
 	CHANNEL = os.Getenv("TWITCH_CHANNEL")
 	CHANNEL_ID = os.Getenv("TWITCH_CHANNEL_ID")
+	CLIENT_ID = os.Getenv("TWITCH_CLIENT_ID")
+	APP_ACCESS_TOKEN = os.Getenv("TWITCH_APP_ACCESS_TOKEN")
 
-	// Check for required configuration.
-	if NICK == "" || OAUTH_TOKEN == "" || CHANNEL == "" || CHANNEL_ID == "" {
-		log.Println("Please set TWITCH_NICK, TWITCH_TOKEN, and TWITCH_CHANNEL in your .env file or as environment variables.")
+	var missingVars []string
+	if NICK == "" {
+		missingVars = append(missingVars, "TWITCH_NICK")
+	}
+	if OAUTH_TOKEN == "" {
+		missingVars = append(missingVars, "TWITCH_TOKEN")
+	}
+	if CHANNEL == "" {
+		missingVars = append(missingVars, "TWITCH_CHANNEL")
+	}
+	if CHANNEL_ID == "" {
+		missingVars = append(missingVars, "TWITCH_CHANNEL_ID")
+	}
+	if CLIENT_ID == "" {
+		missingVars = append(missingVars, "TWITCH_CLIENT_ID")
+	}
+	if APP_ACCESS_TOKEN == "" {
+		missingVars = append(missingVars, "TWITCH_APP_ACCESS_TOKEN")
 	}
 
+	if len(missingVars) > 0 {
+		log.Fatalf("Please set the following environment variables in your .env file: %s", strings.Join(missingVars, ", "))
+	}
+
+	// Use a channel to wait for a termination signal.
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
+	// We will run two separate goroutines for chat and PubSub.
 	go connectToIRC()
-	go connectToPubSub()
+	go connectToEventSub()
 
+	// Wait for a termination signal to close the program.
 	<-sigs
-	fmt.Println("\nProgram Terminating, Disconnecting....")
+	fmt.Println("\nProgram terminated. Disconnecting...")
 }
 
 func connectToIRC() {
-	// Establish a TCP connection to the IRC server.
-	conn, err := net.Dial("tcp", SERVER+":"+PORT)
+	conn, err := net.Dial("tcp", IRC_SERVER+":"+IRC_PORT)
 	if err != nil {
-		log.Fatalf("Error connecting to Twitch: %v", err)
+		log.Fatalf("Error connecting to Twitch IRC: %v", err)
 	}
 	defer conn.Close()
 
-	// Use a bufio.Reader for efficient line-by-line reading.
 	reader := bufio.NewReader(conn)
 
-	log.Printf("Connected to Twitch IRC server: %s", conn.RemoteAddr().String())
-	fmt.Println("----------------- Twitch Chat -----------------")
-	// Send authentication details to the server.
-	fmt.Fprintf(conn, "PASS %s\r\n", OAUTH_TOKEN)
+	fmt.Println("-------------------- Twitch Chat --------------------")
+	// Request IRCv3 tags capability to get user badges.
+	fmt.Fprintf(conn, "CAP REQ :twitch.tv/tags\r\n")
+	// The IRC connection requires the `oauth:` prefix.
+	fmt.Fprintf(conn, "PASS oauth:%s\r\n", OAUTH_TOKEN)
 	fmt.Fprintf(conn, "NICK %s\r\n", NICK)
 	fmt.Fprintf(conn, "JOIN %s\r\n", CHANNEL)
-
-	// log.Printf("Joining channel %s...", CHANNEL)
+	log.Printf("Joined IRC channel %s", CHANNEL)
 
 	for {
-		// Read a line from the connection. A line is terminated by \r\n.
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			log.Printf("Connection lost or closed: %v", err)
+			log.Printf("IRC Connection lost or closed: %v", err)
 			return
 		}
 		line = strings.TrimSpace(line)
 
-		// Handle PING/PONG to keep the connection alive.
 		if strings.HasPrefix(line, "PING") {
 			fmt.Fprintf(conn, "PONG :tmi.twitch.tv\r\n")
-			// log.Println("PING received, PONG sent.")
-			continue
 		}
 
-		// Parse the line for a chat message.
-		matches := chatMessageRegex.FindStringSubmatch(line)
-		if len(matches) == 3 {
-			// matches[1] is the username, matches[2] is the message.
-			username := matches[1]
-			message := matches[2]
-			fmt.Printf("[%s]: %s\n", username, message)
+		parts := strings.SplitN(line, "PRIVMSG", 2)
+		if len(parts) == 2 {
+			tagString := ircTagRegex.FindStringSubmatch(parts[0])
+			username := ""
+			message := strings.TrimSpace(parts[1][strings.Index(parts[1], ":")+1:])
+
+			if tagString != nil {
+				tags := parseTags(tagString[1])
+				username = tags["display-name"]
+				if username == "" {
+					username = tags["login"]
+				}
+				color := getColorByRole(tags["badges"])
+				fmt.Printf(" [CHAT] %s[%s]%s: %s\n", color, username, ColorReset, message)
+			} else {
+				// Fallback for messages without tags
+				matches := chatMessageRegex.FindStringSubmatch(line)
+				if len(matches) == 3 {
+					username = matches[1]
+					fmt.Printf(" [CHAT] %s[%s]%s: %s\n", ColorTwitchPurple, username, ColorReset, message)
+				}
+			}
 		}
 	}
 }
 
-func connectToPubSub() {
-	url := url.URL{Scheme: "wss", Host: "pubsub-edge.twitch.tv", Path: ""}
-	log.Printf("Connecting to PubSub at %s", url.String())
+func getColorByRole(badges string) string {
+	if strings.Contains(badges, "moderator") || strings.Contains(badges, "broadcaster") {
+		return ColorRed
+	}
+	return ColorTwitchPurple
+}
 
-	conn, _, err := websocket.DefaultDialer.Dial(url.String(), nil)
+func parseTags(tagString string) map[string]string {
+	tags := make(map[string]string)
+	pairs := strings.Split(tagString, ";")
+	for _, pair := range pairs {
+		kv := strings.SplitN(pair, "=", 2)
+		if len(kv) == 2 {
+			tags[kv[0]] = kv[1]
+		}
+	}
+	return tags
+}
 
+func connectToEventSub() {
+	u := url.URL{Scheme: "wss", Host: "eventsub.wss.twitch.tv", Path: "/ws"}
+	log.Printf("Connecting to EventSub at %s", u.String())
+
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		log.Fatal("Websocket connection error:", err)
+		log.Fatal("WebSocket connection error:", err)
 	}
 	defer conn.Close()
 
 	done := make(chan struct{})
 
-	// Handle the incoming messages.
 	go func() {
-		defer conn.Close()
+		defer close(done)
 		for {
 			_, message, err := conn.ReadMessage()
 			if err != nil {
@@ -159,95 +213,128 @@ func connectToPubSub() {
 			}
 			var msg map[string]interface{}
 			if err := json.Unmarshal(message, &msg); err != nil {
-				log.Println("JSON Unmarshal error: ", err)
+				log.Println("JSON unmarshal error:", err)
 				continue
 			}
-			handlePubSubMessage(msg)
+
+			metadata, ok := msg["metadata"].(map[string]any)
+			if !ok {
+				log.Println("metadata not found in message")
+				continue
+			}
+
+			messageType, ok := metadata["message_type"].(string)
+			if !ok {
+				log.Println("message_type not found in metadata")
+				continue
+			}
+
+			switch messageType {
+			case "session_welcome":
+				sessionID := msg["payload"].(map[string]any)["session"].(map[string]any)["id"].(string)
+				log.Println("Received session welcome. Session ID:", sessionID)
+				subscribeToEvents(sessionID)
+			case "session_keepalive":
+				//log.Println("Received keepalive message.")
+			case "notification":
+				handleEventSubNotification(msg)
+			case "revocation":
+				log.Println("Received revocation. Session revoked.")
+				return
+			case "session_reconnect":
+				log.Println("Received reconnect message. Disconnecting and reconnecting...")
+				return
+			default:
+				log.Printf("Received unhandled message type: %s", messageType)
+			}
 		}
 	}()
 
-	topics := []string{
-		fmt.Sprintf(PUBSUB_TOPIC_SUB, CHANNEL_ID),
-		fmt.Sprintf(PUBSUB_TOPIC_BITS, CHANNEL_ID),
-		fmt.Sprintf(PUBSUB_TOPIC_POINTS, CHANNEL_ID),
-	}
-	subscribe(conn, topics, OAUTH_TOKEN)
+	<-done
+	log.Println("EventSub connection closed.")
+}
 
-	// Need to keep the connection alive
-	ticker := time.NewTicker(PUBSUB_PING_INTERVAL)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-done:
-			return
-		case <-ticker.C:
-			ping(conn)
+func subscribeToEvents(sessionID string) {
+	subscriptionTypes := []string{
+		"channel.subscribe",
+		"channel.cheer",
+		"channel.channel_points_custom_reward_redemption.add",
+	}
+
+	for _, eventType := range subscriptionTypes {
+		data := map[string]any{
+			"type":      eventType,
+			"version":   "1",
+			"condition": map[string]string{"broadcaster_user_id": CHANNEL_ID},
+			"transport": map[string]string{"method": "websocket", "session_id": sessionID},
 		}
+
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			log.Printf("Error marshalling JSON for %s: %v", eventType, err)
+			continue
+		}
+
+		client := &http.Client{}
+		req, err := http.NewRequest("POST", API_URL, bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("Error creating request for %s: %v", eventType, err)
+			continue
+		}
+
+		req.Header.Add("Client-ID", CLIENT_ID)
+		req.Header.Add("Authorization", "Bearer "+OAUTH_TOKEN)
+		req.Header.Add("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("Error making request for %s: %v", eventType, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("Error reading response body for %s: %v", eventType, err)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusAccepted || resp.StatusCode == http.StatusOK {
+			log.Printf("Successfully subscribed to %s", eventType)
+		} else {
+			log.Printf("Failed to subscribe to %s. Status: %s, Body: %s", eventType, resp.Status, string(bodyBytes))
+		}
+	}
+	fmt.Println("Application is now ready to receive events.")
+}
+
+func handleEventSubNotification(msg map[string]interface{}) {
+	fmt.Println("----------------- Activity Feed -----------------")
+	payload, ok := msg["payload"].(map[string]any)
+	if !ok {
+		return
+	}
+	event, ok := payload["event"].(map[string]any)
+	if !ok {
+		return
+	}
+	eventType, ok := payload["subscription"].(map[string]any)["type"].(string)
+	if !ok {
+		return
+	}
+
+	switch eventType {
+	case "channel.subscribe":
+		username := event["user_name"].(string)
+		fmt.Printf(" [ACTVITY] New Subscriber: %s!\n", username)
+	case "channel.cheer":
+		username := event["user_name"].(string)
+		bitsAmount := event["bits"].(float64)
+		fmt.Printf(" [ACTVITY] %s cheered %d bits!\n", username, int(bitsAmount))
+	case "channel.channel_points_custom_reward_redemption.add":
+		username := event["user_name"].(string)
+		rewardTitle := event["reward"].(map[string]any)["title"].(string)
+		fmt.Printf(" [ACTVITY] %s redeemed channel points for: %s\n", username, rewardTitle)
 	}
 }
 
-func subscribe(conn *websocket.Conn, topics []string, token string) {
-	fmt.Println("----------------- Twitch Activity -----------------")
-	request := map[string]interface{}{
-		"type":  "LISTEN",
-		"NONCE": fmt.Sprintf("%d", time.Now().UnixNano()),
-		"data": map[string]interface{}{
-			"topics":     topics,
-			"auth_token": token,
-		},
-	}
-	if err := conn.WriteJSON(request); err != nil {
-		log.Println(" Subscribe failed: ", err)
-	} else {
-		log.Println(" Subscribe to topics: ")
-	}
-}
-
-func ping(conn *websocket.Conn) {
-	request := map[string]string{"type": "PING"}
-	if err := conn.WriteJSON(request); err != nil {
-		log.Println(" Ping failed: ", err)
-	}
-}
-
-func handlePubSubMessage(msg map[string]interface{}) {
-	if msg["type"] == "MESSAGE" {
-		data, ok := msg["data"].(map[string]interface{})
-		if !ok {
-			return
-		}
-
-		messageData, ok := data["message"].(string)
-		if !ok {
-			return
-		}
-
-		var pubsubEvent map[string]interface{}
-		if err := json.Unmarshal([]byte(messageData), &pubsubEvent); err != nil {
-			log.Println(" Error unmarshaling PubSub event message: ", err)
-			return
-		}
-
-		switch pubsubEvent["type"] {
-		case "sub_message":
-			// Handles all subscriber events
-			subscriptionData := pubsubEvent["data"].(map[string]interface{})
-			username := subscriptionData["username"].(string)
-			fmt.Printf("[FEED]: New Subscriber: %s!\n", username)
-		case "bits_event":
-			// Handles all bit events
-			bitsData := pubsubEvent["data"].(map[string]interface{})
-			username := bitsData["username"].(string)
-			bitsAmount := bitsData["bits_used"].(float64)
-			fmt.Printf("[FEED]: %s cheered %d bits!!\n", username, int(bitsAmount))
-		case "reward_redeemded":
-			// Handles all point redeem events
-			redemptionData := pubsubEvent["data"].(map[string]interface{})["redemption"].(map[string]interface{})
-			user := redemptionData["user"].(map[string]interface{})
-			reward := redemptionData["reward"].(map[string]interface{})
-			username := user["login"].(string)
-			rewardTitle := reward["title"].(string)
-			fmt.Printf("[FEED] %s redeemed channel points for: %s\n", username, rewardTitle)
-		}
-	}
-}
