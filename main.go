@@ -2,13 +2,22 @@ package main
 
 import (
 	"bufio"
+	"os/signal"
+
+	// "encoding/json"
 	"fmt"
 	"log"
 	"net"
+
+	// "net/url"
 	"os"
+	// "os/signal"
 	"regexp"
 	"strings"
+	"syscall"
+	"time"
 
+	//	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 )
 
@@ -26,6 +35,16 @@ var (
 	CHANNEL string
 )
 
+// Configuration for the activity feed.
+const (
+	PUBSUB_URL           = "wss://pubsub-edge.twitch.tv"
+	PUBSUB_TOPIC_SUB     = "channel-subscribe-events-v1.%s"
+	PUBSUB_TOPIC_BITS    = "channel-bits-events-v2.%s"
+	PUBSUB_TOPIC_POINTS  = "channel-points-channel-v1.%s"
+	PUBSUB_PING_INTERVAL = 4 * time.Minute
+)
+
+// Configuration for irc chat
 const (
 	SERVER = "irc.chat.twitch.tv"
 	PORT   = "6667"
@@ -34,28 +53,40 @@ const (
 // A regular expression to parse the username and message from an IRC PRIVMSG.
 var chatMessageRegex = regexp.MustCompile(`^:(\w+)!.*?PRIVMSG #\w+ :(.+)$`)
 
+// A regular expression to extract user ID from the response.
+var userIDRegex = regexp.MustCompile(`^@.*user-id=(\d+).*$`)
+
+// Channel IDs are for the Pub Sub topics, you need the ID and not the name.
+var CHANNEL_ID string
+
 func main() {
 	// Load environment variables from the .env file.
-	// If the file doesn't exist, it will fall back to system environment variables.
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("Note: No .env file found. Falling back to system environment variables.")
+		log.Println("Note: No .env file found.")
 	}
 
 	// Read values from the environment.
 	NICK = os.Getenv("TWITCH_NICK")
 	OAUTH_TOKEN = os.Getenv("TWITCH_TOKEN")
 	CHANNEL = os.Getenv("TWITCH_CHANNEL")
+	CHANNEL_ID = os.Getenv("TWITCH_CHANNEL_ID")
 
 	// Check for required configuration.
-	if NICK == "" || OAUTH_TOKEN == "" || CHANNEL == "" {
+	if NICK == "" || OAUTH_TOKEN == "" || CHANNEL == "" || CHANNEL_ID == "" {
 		log.Println("Please set TWITCH_NICK, TWITCH_TOKEN, and TWITCH_CHANNEL in your .env file or as environment variables.")
-		log.Println("Using default guest configuration (read-only mode).")
-		NICK = "justinfan123"
-		OAUTH_TOKEN = "oauth:123" // The token is not validated for guests.
-		CHANNEL = "#twitch"
 	}
 
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go connectToIRC()
+
+	<-sigs
+	fmt.Println("\nProgram Terminating, Disconnecting....")
+}
+
+func connectToIRC() {
 	// Establish a TCP connection to the IRC server.
 	conn, err := net.Dial("tcp", SERVER+":"+PORT)
 	if err != nil {
@@ -67,7 +98,7 @@ func main() {
 	reader := bufio.NewReader(conn)
 
 	log.Printf("Connected to Twitch IRC server: %s", conn.RemoteAddr().String())
-
+	fmt.Println("----------------- Twitch Chat -----------------")
 	// Send authentication details to the server.
 	fmt.Fprintf(conn, "PASS %s\r\n", OAUTH_TOKEN)
 	fmt.Fprintf(conn, "NICK %s\r\n", NICK)
