@@ -2,22 +2,23 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"os/signal"
 
-	// "encoding/json"
 	"fmt"
 	"log"
 	"net"
-
-	// "net/url"
+	"net/url"
 	"os"
-	// "os/signal"
+
+	//"os/signal"
 	"regexp"
 	"strings"
 	"syscall"
 	"time"
 
 	//	"github.com/gorilla/websocket"
+	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 )
 
@@ -81,6 +82,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	go connectToIRC()
+	go connectToPubSub()
 
 	<-sigs
 	fmt.Println("\nProgram Terminating, Disconnecting....")
@@ -129,6 +131,123 @@ func connectToIRC() {
 			username := matches[1]
 			message := matches[2]
 			fmt.Printf("[%s]: %s\n", username, message)
+		}
+	}
+}
+
+func connectToPubSub() {
+	url := url.URL{Scheme: "wss", Host: "pubsub-edge.twitch.tv", Path: ""}
+	log.Printf("Connecting to PubSub at %s", url.String())
+
+	conn, _, err := websocket.DefaultDialer.Dial(url.String(), nil)
+
+	if err != nil {
+		log.Fatal("Websocket connection error:", err)
+	}
+	defer conn.Close()
+
+	done := make(chan struct{})
+
+	// Handle the incoming messages.
+	go func() {
+		defer conn.Close()
+		for {
+			_, message, err := conn.ReadMessage()
+			if err != nil {
+				log.Println("Read error:", err)
+				return
+			}
+			var msg map[string]interface{}
+			if err := json.Unmarshal(message, &msg); err != nil {
+				log.Println("JSON Unmarshal error: ", err)
+				continue
+			}
+			handlePubSubMessage(msg)
+		}
+	}()
+
+	topics := []string{
+		fmt.Sprintf(PUBSUB_TOPIC_SUB, CHANNEL_ID),
+		fmt.Sprintf(PUBSUB_TOPIC_BITS, CHANNEL_ID),
+		fmt.Sprintf(PUBSUB_TOPIC_POINTS, CHANNEL_ID),
+	}
+	subscribe(conn, topics, OAUTH_TOKEN)
+
+	// Need to keep the connection alive
+	ticker := time.NewTicker(PUBSUB_PING_INTERVAL)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			ping(conn)
+		}
+	}
+}
+
+func subscribe(conn *websocket.Conn, topics []string, token string) {
+	fmt.Println("----------------- Twitch Activity -----------------")
+	request := map[string]interface{}{
+		"type":  "LISTEN",
+		"NONCE": fmt.Sprintf("%d", time.Now().UnixNano()),
+		"data": map[string]interface{}{
+			"topics":     topics,
+			"auth_token": token,
+		},
+	}
+	if err := conn.WriteJSON(request); err != nil {
+		log.Println(" Subscribe failed: ", err)
+	} else {
+		log.Println(" Subscribe to topics: ")
+	}
+}
+
+func ping(conn *websocket.Conn) {
+	request := map[string]string{"type": "PING"}
+	if err := conn.WriteJSON(request); err != nil {
+		log.Println(" Ping failed: ", err)
+	}
+}
+
+func handlePubSubMessage(msg map[string]interface{}) {
+	if msg["type"] == "MESSAGE" {
+		data, ok := msg["data"].(map[string]interface{})
+		if !ok {
+			return
+		}
+
+		messageData, ok := data["message"].(string)
+		if !ok {
+			return
+		}
+
+		var pubsubEvent map[string]interface{}
+		if err := json.Unmarshal([]byte(messageData), &pubsubEvent); err != nil {
+			log.Println(" Error unmarshaling PubSub event message: ", err)
+			return
+		}
+
+		switch pubsubEvent["type"] {
+		case "sub_message":
+			// Handles all subscriber events
+			subscriptionData := pubsubEvent["data"].(map[string]interface{})
+			username := subscriptionData["username"].(string)
+			fmt.Printf("[FEED]: New Subscriber: %s!\n", username)
+		case "bits_event":
+			// Handles all bit events
+			bitsData := pubsubEvent["data"].(map[string]interface{})
+			username := bitsData["username"].(string)
+			bitsAmount := bitsData["bits_used"].(float64)
+			fmt.Printf("[FEED]: %s cheered %d bits!!\n", username, int(bitsAmount))
+		case "reward_redeemded":
+			// Handles all point redeem events
+			redemptionData := pubsubEvent["data"].(map[string]interface{})["redemption"].(map[string]interface{})
+			user := redemptionData["user"].(map[string]interface{})
+			reward := redemptionData["reward"].(map[string]interface{})
+			username := user["login"].(string)
+			rewardTitle := reward["title"].(string)
+			fmt.Printf("[FEED] %s redeemed channel points for: %s\n", username, rewardTitle)
 		}
 	}
 }
