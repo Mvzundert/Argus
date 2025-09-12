@@ -18,6 +18,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
+	"golang.org/x/term"
 )
 
 // --- Configuration ---
@@ -29,9 +30,6 @@ var OAUTH_TOKEN string
 
 // Your Twitch Client ID.
 var CLIENT_ID string
-
-// Your Twitch App Access Token. Get one for your application to make API calls.
-var APP_ACCESS_TOKEN string
 
 // The channel to connect to, including the # prefix.
 var CHANNEL string
@@ -64,6 +62,9 @@ var chatMessageRegex = regexp.MustCompile(`^:(\w+)!.*?PRIVMSG #\w+ :(.+)$`)
 // A regular expression to extract IRC tags.
 var ircTagRegex = regexp.MustCompile(`^@([^ ]+) `)
 
+// A regular expression to strip ANSI codes.
+var ansiStripRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?(?:[a-zA-Z\\d]+(?:;[a-zA-Z\\d]*)*)?[a-zA-Z])|(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?(?:[a-zA-Z\\d]+(?:;[a-zA-Z\\d]*)*)?[a-zA-Z\u0080-\u009F])")
+
 // Channel IDs for PubSub topics. You need the user ID, not the name.
 var CHANNEL_ID string
 var SHOW_LOGS bool
@@ -81,7 +82,6 @@ func main() {
 	CHANNEL = os.Getenv("TWITCH_CHANNEL")
 	CHANNEL_ID = os.Getenv("TWITCH_CHANNEL_ID")
 	CLIENT_ID = os.Getenv("TWITCH_CLIENT_ID")
-	APP_ACCESS_TOKEN = os.Getenv("TWITCH_APP_ACCESS_TOKEN")
 	SHOW_LOGS = os.Getenv("SHOW_LOGS") == "true"
 
 	var missingVars []string
@@ -99,9 +99,6 @@ func main() {
 	}
 	if CLIENT_ID == "" {
 		missingVars = append(missingVars, "TWITCH_CLIENT_ID")
-	}
-	if APP_ACCESS_TOKEN == "" {
-		missingVars = append(missingVars, "TWITCH_APP_ACCESS_TOKEN")
 	}
 
 	if len(missingVars) > 0 {
@@ -130,20 +127,14 @@ func connectToIRC() {
 
 	reader := bufio.NewReader(conn)
 
+	fmt.Println("-------------------- Twitch Chat --------------------")
 	// Request IRCv3 tags capability to get user badges.
 	fmt.Fprintf(conn, "CAP REQ :twitch.tv/tags\r\n")
 	// The IRC connection requires the `oauth:` prefix.
 	fmt.Fprintf(conn, "PASS oauth:%s\r\n", OAUTH_TOKEN)
 	fmt.Fprintf(conn, "NICK %s\r\n", NICK)
 	fmt.Fprintf(conn, "JOIN %s\r\n", CHANNEL)
-
-	if SHOW_LOGS {
-		fmt.Println("-------------------- Twitch Chat --------------------")
-		log.Printf("Joined IRC channel %s", CHANNEL)
-		fmt.Println("-------------------------------------------------")
-	} else {
-		log.Printf("CLI active for channel %s", CHANNEL)
-	}
+	log.Printf("Joined IRC channel %s", CHANNEL)
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -170,7 +161,17 @@ func connectToIRC() {
 					username = tags["login"]
 				}
 				color := getColorByRole(tags["badges"])
-				fmt.Printf(" [CHAT] %s[%s]%s: %s\n", color, username, ColorReset, message)
+
+				// Get the terminal width and wrap the message
+				width, _, err := term.GetSize(int(os.Stdout.Fd()))
+				if err == nil && width > 0 {
+					prefix := fmt.Sprintf(" [CHAT] %s[%s]%s: ", color, username, ColorReset)
+					prefixLen := len(stripAnsiCodes(prefix))
+					wrappedMessage := wrapMessage(message, width-prefixLen, prefixLen)
+					fmt.Printf("%s\n", prefix+wrappedMessage)
+				} else {
+					fmt.Printf(" [CHAT] %s[%s]%s: %s\n", color, username, ColorReset, message)
+				}
 			} else {
 				// Fallback for messages without tags
 				matches := chatMessageRegex.FindStringSubmatch(line)
@@ -181,6 +182,34 @@ func connectToIRC() {
 			}
 		}
 	}
+}
+
+func wrapMessage(message string, width int, prefixLen int) string {
+	var builder strings.Builder
+	words := strings.Fields(message)
+	if len(words) == 0 {
+		return ""
+	}
+
+	currentLineLen := 0
+	for i, word := range words {
+		if currentLineLen+len(word)+1 > width {
+			builder.WriteString("\n" + strings.Repeat(" ", prefixLen))
+			currentLineLen = 0
+		}
+		builder.WriteString(word)
+		if i < len(words)-1 {
+			builder.WriteString(" ")
+			currentLineLen += len(word) + 1
+		} else {
+			currentLineLen += len(word)
+		}
+	}
+	return builder.String()
+}
+
+func stripAnsiCodes(str string) string {
+	return ansiStripRegex.ReplaceAllString(str, "")
 }
 
 func getColorByRole(badges string) string {
@@ -226,7 +255,7 @@ func connectToEventSub() {
 				}
 				return
 			}
-			var msg map[string]interface{}
+			var msg map[string]any
 			if err := json.Unmarshal(message, &msg); err != nil {
 				if SHOW_LOGS {
 					log.Println("JSON unmarshal error:", err)
@@ -350,12 +379,6 @@ func subscribeToEvents(sessionID string) {
 			}
 		}
 	}
-
-	if SHOW_LOGS {
-		fmt.Println("----------------- Activity Feed -----------------")
-		fmt.Println("Application is now ready to receive events.")
-		fmt.Println("-------------------------------------------------")
-	}
 }
 
 func handleEventSubNotification(msg map[string]any) {
@@ -387,3 +410,4 @@ func handleEventSubNotification(msg map[string]any) {
 		fmt.Printf("%s [ACTIVITY] %s redeemed %d channel points for: %s%s\n", ColorCyan, username, int(rewardCost), rewardTitle, ColorReset)
 	}
 }
+
