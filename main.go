@@ -192,8 +192,8 @@ func getColorByRole(badges string) string {
 
 func parseTags(tagString string) map[string]string {
 	tags := make(map[string]string)
-	pairs := strings.Split(tagString, ";")
-	for _, pair := range pairs {
+	pairs := strings.SplitSeq(tagString, ";")
+	for pair := range pairs {
 		kv := strings.SplitN(pair, "=", 2)
 		if len(kv) == 2 {
 			tags[kv[0]] = kv[1]
