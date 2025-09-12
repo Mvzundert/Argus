@@ -67,9 +67,39 @@ The response will be a JSON object containing your access_token. Copy this token
 ## 3. Getting Your Twitch Channel ID
 The EventSub API requires your Twitch Channel ID (a number), not your channel's name.
 
-You can find your channel ID by visiting your Twitch profile URL and copying the numbers after ```bash https://www.twitch.tv/directory/game/```
+If you're already a developer and have access to the Twitch API, you can use the Get Users endpoint to find your Channel ID programmatically. 
+This method requires a Client ID and an access token.
 
-Alternatively, you can use a third-party tool like Twitch User ID Converter to find your ID.
+### Obtain an Access Token:
+You'll need an app access token from the Twitch Developer Console.
+
+### Make an API Call:
+Use curl or a similar tool to make a GET request to the Get Users endpoint, passing your username as a query parameter.
+
+```Bash
+
+curl -X GET 'https://api.twitch.tv/helix/users?login=your_twitch_username' \
+-H 'Authorization: Bearer <your-access-token>' \
+-H 'Client-Id: <your-client-id>'
+```
+
+### Parse the Response:
+The API will return a JSON response with an id field. This field contains the Channel ID. The response will look something like this:
+
+```JSON
+{
+  "data": [
+    {
+      "id": "123456789",
+      "login": "your_twitch_username",
+      "display_name": "Your Twitch Username",
+      ...
+    }
+  ]
+}
+```
+
+The id field in the response is your Channel ID. This method is the most reliable and is what you would use in a custom application.
 
 # Running the Application
 Once you have created your .env file and filled in all the credentials, you can run the application by navigating to the project directory in your terminal and executing:
