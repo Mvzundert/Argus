@@ -44,7 +44,7 @@ Set the OAuth Redirect URL to ```http://localhost```
 Open the following URL in your web browser, replacing YOUR_CLIENT_ID with the ID of the application you just registered:
 
 ```Bash
-[https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=YOUR_CLIENT_ID&redirect_uri=http://localhost&scope=chat%3Aread%20channel%3Aread%3Asubscriptions%20bits%3Aread%20channel%3Aread%3Aredemptions](https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=YOUR_CLIENT_ID&redirect_uri=http://localhost&scope=chat%3Aread%20channel%3Aread%3Asubscriptions%20bits%3Aread%20channel%3Aread%3Aredemptions)
+https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=YOUR_CLIENT_ID&redirect_uri=http://localhost&scope=chat%3Aread%20channel%3Aread%3Asubscriptions%20bits%3Aread%20channel%3Aread%3Aredemptions
 ```
 
 After you authorize the application, your browser will be redirected to http://localhost. The token will be in the address bar's URL fragment. Copy the entire token string and paste it into the TWITCH_TOKEN variable in your .env file. Do not include the oauth: prefix.
@@ -57,7 +57,7 @@ Find your Client ID and Client Secret in the Twitch Developer Console for the ap
 Open your terminal and make the following curl request, replacing the placeholders with your own credentials:
 
 ```Bash
-curl -X POST '[https://id.twitch.tv/oauth2/token](https://id.twitch.tv/oauth2/token)' \
+curl -X POST 'https://id.twitch.tv/oauth2/token' \
 -H 'Content-Type: application/x-www-form-urlencoded' \
 -d 'client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&grant_type=client_credentials'
 ```
@@ -77,4 +77,3 @@ Once you have created your .env file and filled in all the credentials, you can 
 ```Bash
 go run .
 ```
-
