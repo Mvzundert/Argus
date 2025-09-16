@@ -83,6 +83,7 @@ func StartServer() {
 								artistNameEl.textContent = data.item.artists[0].name;
 								songTitleEl.textContent = data.item.name;
 								
+								// Reset animation state
 								songTitleEl.classList.remove('animate');
 								songTitleEl.style.transform = 'translate(0)';
 								songTitleEl.style.left = '0%';
@@ -93,10 +94,10 @@ func StartServer() {
 								
 								const progressMs = data.progress_ms;
 								const durationMs = data.item.duration_ms;
-                                
+
                                 if (durationMs > 0) {
                                     const progressPercentage = (progressMs / durationMs) * 100;
-                                    progressBarEl.style.width = progressPercentage + '%%';
+                                    progressBarEl.style.width = progressPercentage + '%';
                                 } else {
                                     progressBarEl.style.width = '0%';
                                 }
