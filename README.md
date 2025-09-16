@@ -1,15 +1,27 @@
-# Twitch Go
-This is a Go-based command-line interface (CLI) application that connects to both Twitch's IRC chat server and the EventSub API to display chat messages and activity feed events (subscribers, cheers, and channel points redemptions).
+# 🎙️ Twitch-Go: Stream Activity & Now Playing Widget
 
-# Prerequisites
-Before you can run this application, you need to have the following installed:
+This is a versatile Go application designed for live streamers. It connects to Twitch to display chat messages, subscriptions, and other activity in your terminal, while also spinning up a real-time "Now Playing" web widget that you can use as a Browser Source in streaming software like OBS.
 
-**Go:** The application is written in Go. You can download and install it from [GoLang](https://golang.org)
+## Key Features
 
-**Go Libraries:** You need a few Go packages to handle environment variables and WebSocket connections. You can get them by running the following commands in your terminal:
+* **Twitch CLI:** See live chat messages, cheers, and channel point redemptions directly in your terminal.
+* **Now Playing Widget:** A browser-source overlay that automatically displays the current song from your media player.
+* **Cross-Platform:** The "Now Playing" functionality supports both Linux (`playerctl`) and macOS (`nowplaying-cli`).
+* **Simple Setup:** Configuration is handled through a single `.env` file.
 
-go get [github.com/joho/godotenv](https://github.com/joho/godotenv)
-go get [github.com/gorilla/websocket](https://github.com/gorilla/websocket)
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+Before running the application, ensure you have the following installed:
+
+* **Go:** The application is written in Go. You can get it from the official [GoLang website](https://golang.org).
+* **Media Player CLI:**
+    * **Linux**: You need **`playerctl`** to fetch song data. Install it via your distribution's package manager (e.g., `sudo apt install playerctl`).
+    * **macOS**: You need **`nowplaying-cli`**. Install it with `brew install nowplaying-cli`.
+
+The Go application will automatically download its other dependencies when you run it.
 
 # Configuration
 You must create a .env file in the same directory as the Go application with the following environment variables.
@@ -107,3 +119,11 @@ Once you have created your .env file and filled in all the credentials, you can 
 ```Bash
 go run .
 ```
+>The application will start, display a live feed of your Twitch chat in the terminal, and launch a web server on http://localhost:8080 for the "Now Playing" widget.
+
+# Using in OBS-Studio
+For the "Now Playing" Widget:
+
+- In OBS Studio, add a new Browser source.
+- Set the URL to http://localhost:8080.
+- Adjust the width and height to fit your desired overlay.
