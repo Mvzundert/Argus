@@ -1,13 +1,13 @@
 package services
 
 import (
+	"argus/dependencies"
+	"argus/music"
 	"fmt"
 	"log"
 	"runtime"
 	"strconv"
 	"strings"
-	"twitch-go/dependencies"
-	"twitch-go/music"
 )
 
 // NowPlayingData represents the data to be returned by the API.

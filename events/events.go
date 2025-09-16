@@ -1,6 +1,8 @@
 package events
 
 import (
+	"argus/colors"
+	"argus/config"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -8,8 +10,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"twitch-go/colors"
-	"twitch-go/config"
 
 	"github.com/gorilla/websocket"
 )

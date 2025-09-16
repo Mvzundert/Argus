@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/term"
 
-	"twitch-go/colors"
-	"twitch-go/config"
+	"argus/colors"
+	"argus/config"
 )
 
 // --- Configuration ---

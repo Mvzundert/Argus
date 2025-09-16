@@ -1,4 +1,4 @@
-module twitch-go
+module argus
 
 go 1.25.1
 

@@ -6,10 +6,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"twitch-go/chat"
-	"twitch-go/config"
-	"twitch-go/events"
-	"twitch-go/web"
+	"argus/chat"
+	"argus/config"
+	"argus/events"
+	"argus/web"
 )
 
 func main() {
@@ -30,4 +30,3 @@ func main() {
 	<-sigs
 	fmt.Println("\nProgram terminated. Disconnecting...")
 }
-

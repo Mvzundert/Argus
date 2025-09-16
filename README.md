@@ -1,4 +1,4 @@
-# Twitch-Go: Stream Activity & Now Playing Widget
+# Argus: Stream Activity & Now Playing Widget
 
 This is a versatile Go application designed for live streamers. It connects to Twitch to display chat messages, subscriptions, and other activity in your terminal, while also spinning up a real-time "Now Playing" web widget that you can use as a Browser Source in streaming software like OBS.
 

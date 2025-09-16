@@ -1,11 +1,11 @@
 package web
 
 import (
+	"argus/services"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"twitch-go/services"
 )
 
 // StartServer starts the web server.
@@ -137,4 +137,3 @@ func StartServer() {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
-
