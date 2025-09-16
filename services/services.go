@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"strconv"
 	"strings"
-	"time"
 	"twitch-go/dependencies"
 	"twitch-go/music"
 )
@@ -74,14 +74,10 @@ func (s *NowPlayingService) GetNowPlayingInfo() (NowPlayingData, error) {
 		playerFound = true
 	}
 
-	// If no player was found, return early
 	if !playerFound {
 		log.Println("No playing media found in prioritized players.")
 		return NowPlayingData{IsPlaying: false}, nil
 	}
-
-	// **DEBUG LOGGING**
-	log.Printf("Raw command output: %s", rawOutput)
 
 	if rawOutput == "" {
 		return NowPlayingData{IsPlaying: false}, nil
@@ -90,23 +86,25 @@ func (s *NowPlayingService) GetNowPlayingInfo() (NowPlayingData, error) {
 	if runtime.GOOS == "linux" {
 		parts := strings.Split(rawOutput, ";")
 
-		// **DEBUG LOGGING**
-		log.Printf("Parsed parts: %v", parts)
-
 		if len(parts) < 5 {
 			log.Println("Parsing failed, not enough parts.")
 			return NowPlayingData{IsPlaying: false}, nil
 		}
 
-		position, err := parseDuration(parts[3])
+		position, err := parseTime(parts[3])
 		if err != nil {
 			log.Printf("Error parsing position: %v", err)
 			position = 0
 		}
 
-		length, err := parseDuration(parts[4])
+		length, err := parseTime(parts[4])
 		if err != nil {
 			log.Printf("Error parsing length: %v", err)
+			length = 0
+		}
+
+		// If length is the max integer value, set it to 0 to prevent division errors.
+		if length == 9223372036854775807 {
 			length = 0
 		}
 
@@ -123,9 +121,6 @@ func (s *NowPlayingService) GetNowPlayingInfo() (NowPlayingData, error) {
 
 	if runtime.GOOS == "darwin" {
 		parts := strings.SplitN(rawOutput, " by ", 2)
-
-		// **DEBUG LOGGING**
-		log.Printf("Parsed parts: %v", parts)
 
 		if len(parts) < 2 {
 			log.Println("Parsing failed, not enough parts.")
@@ -144,11 +139,11 @@ func (s *NowPlayingService) GetNowPlayingInfo() (NowPlayingData, error) {
 	return NowPlayingData{IsPlaying: false}, nil
 }
 
-func parseDuration(s string) (int64, error) {
-	d, err := time.ParseDuration(s + "ns")
+// parseTime converts a string of microseconds to milliseconds.
+func parseTime(s string) (int64, error) {
+	val, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return 0, err
 	}
-	return d.Milliseconds(), nil
+	return val / 1000, nil // Convert microseconds to milliseconds
 }
-
