@@ -16,7 +16,7 @@ func main() {
 	cfg := config.Load()
 
 	// Start the web server in its own goroutine.
-	go web.StartServer()
+	go web.StartServer(cfg)
 
 	// Use a channel to wait for a termination signal.
 	sigs := make(chan os.Signal, 1)
