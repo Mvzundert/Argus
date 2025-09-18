@@ -41,6 +41,12 @@ TWITCH_CHANNEL="#your_channel_name"
 
 # The numeric ID for your Twitch channel.
 TWITCH_CHANNEL_ID="your_channel_id"
+
+# Set to true / false if you want to display debug logging in CLI
+SHOW_LOGS=TRUE
+
+# set the port you want the overlay webserver to publish on.
+PORT=8080
 ```
 
 # Getting Your Credentials
