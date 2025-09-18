@@ -1,6 +1,7 @@
 package web
 
 import (
+	"argus/config"
 	"argus/services"
 	"encoding/json"
 	"fmt"
@@ -9,7 +10,7 @@ import (
 )
 
 // StartServer starts the web server.
-func StartServer() {
+func StartServer(cfg config.Config) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		html := `
 			<!DOCTYPE html>
@@ -132,8 +133,10 @@ func StartServer() {
 		json.NewEncoder(w).Encode(data)
 	})
 
-	log.Println("Starting server on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if cfg.ShowLogs {
+		log.Printf("Starting server on :%s", cfg.Port)
+	}
+	if err := http.ListenAndServe(":"+cfg.Port, nil); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }

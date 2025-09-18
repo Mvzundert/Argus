@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -17,13 +18,32 @@ type Config struct {
 	Channel        string
 	ChannelID      string
 	ShowLogs       bool
+	Port           string
 }
 
 // Load reads configuration from environment (with optional .env) and validates required fields.
 func Load() Config {
-	// Load environment variables from the .env file if present.
-	if err := godotenv.Load(); err != nil {
-		log.Println("Note: No .env file found. Falling back to system environment variables.")
+	// On Unix, including macOS, it returns the $HOME environment variable.
+	// On Windows, it returns %USERPROFILE%.
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("Error getting home directory: %v", err)
+	}
+
+	// look for $HOME/.config/argus/argus.conf
+	configPath := filepath.Join(homeDir, ".config", "argus", "argus.conf")
+
+	// Load the config
+	err = godotenv.Load(configPath)
+
+	if err != nil {
+		// Tell the user we cannot load the env
+		log.Printf("Error Loading config file from %s. Falling back to .env instead", configPath)
+
+		// Load environment variables from the .env file if present.
+		if err := godotenv.Load(); err != nil {
+			log.Println("Note: No .env file found. Falling back to system environment variables.")
+		}
 	}
 
 	cfg := Config{
@@ -34,6 +54,7 @@ func Load() Config {
 		ClientID:       os.Getenv("TWITCH_CLIENT_ID"),
 		AppAccessToken: os.Getenv("TWITCH_APP_ACCESS_TOKEN"),
 		ShowLogs:       os.Getenv("SHOW_LOGS") == "true",
+		Port:           os.Getenv("PORT"),
 	}
 
 	var missingVars []string
@@ -54,6 +75,9 @@ func Load() Config {
 	}
 	if cfg.AppAccessToken == "" {
 		missingVars = append(missingVars, "TWITCH_APP_ACCESS_TOKEN")
+	}
+	if cfg.Port == "" {
+		missingVars = append(missingVars, "PORT")
 	}
 
 	if len(missingVars) > 0 {
