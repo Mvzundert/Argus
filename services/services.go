@@ -54,7 +54,7 @@ func (s *NowPlayingService) GetNowPlayingInfo() (NowPlayingData, error) {
 	var playerFound bool
 
 	if runtime.GOOS == "linux" {
-		playerPriority := []string{"spotify", "vlc", "chromium", "firefox"}
+		playerPriority := []string{"spotify", "vlc"}
 		for _, player := range playerPriority {
 			args := []string{"--player=" + player, "metadata", "--format", "{{status}};{{artist}};{{title}};{{position}};{{mpris:length}}"}
 			output, innerErr := music.GetNowPlayingInfo(dep.Command, args...)
@@ -75,7 +75,6 @@ func (s *NowPlayingService) GetNowPlayingInfo() (NowPlayingData, error) {
 	}
 
 	if !playerFound {
-		log.Println("No playing media found in prioritized players.")
 		return NowPlayingData{IsPlaying: false}, nil
 	}
 
