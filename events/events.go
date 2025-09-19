@@ -119,7 +119,7 @@ func subscribeToEvents(sessionID string, cfg config.Config) {
 		data := map[string]any{
 			"type":      eventType,
 			"version":   "1",
-			"condition": map[string]string{"broadcaster_user_id": CHANNEL_ID},
+			"condition": map[string]string{"broadcaster_user_id": cfg.ChannelID},
 			"transport": map[string]string{"method": "websocket", "session_id": sessionID},
 		}
 
