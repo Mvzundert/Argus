@@ -14,9 +14,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Channel IDs for PubSub topics. You need the user ID, not the name.
-var CHANNEL_ID string
-
 // Twitch EventSub configuration.
 const (
 	EVENTSUB_URL = "wss://eventsub.wss.twitch.tv/ws"
