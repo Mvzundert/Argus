@@ -29,16 +29,22 @@ type Artist struct {
 	Name string `json:"name"`
 }
 
-// NowPlayingService contains the logic for the now playing feature.
-type NowPlayingService struct{}
+// NowPlayingService is the INTERFACE that defines the contract.
+type NowPlayingService interface {
+	GetNowPlayingInfo() (NowPlayingData, error)
+}
+
+// nowPlayingServiceImpl is the CONCRETE STRUCT that implements the interface.
+type nowPlayingServiceImpl struct{}
 
 // NewNowPlayingService creates a new instance of the service.
-func NewNowPlayingService() *NowPlayingService {
-	return &NowPlayingService{}
+func NewNowPlayingService() NowPlayingService {
+	return &nowPlayingServiceImpl{}
 }
 
 // GetNowPlayingInfo retrieves the current track information.
-func (s *NowPlayingService) GetNowPlayingInfo() (NowPlayingData, error) {
+func (s *nowPlayingServiceImpl) GetNowPlayingInfo() (NowPlayingData, error) {
+	// ... all your original implementation code here ...
 	dep := dependencies.GetNowPlayingDependency()
 	if dep == nil {
 		return NowPlayingData{}, fmt.Errorf("unsupported OS: %s", runtime.GOOS)
@@ -82,7 +88,11 @@ func (s *NowPlayingService) GetNowPlayingInfo() (NowPlayingData, error) {
 		return NowPlayingData{IsPlaying: false}, nil
 	}
 
-	if runtime.GOOS == "linux" {
+	return parseRawOutput(rawOutput, runtime.GOOS)
+}
+
+func parseRawOutput(rawOutput, os string) (NowPlayingData, error) {
+	if os == "linux" {
 		parts := strings.Split(rawOutput, ";")
 
 		if len(parts) < 5 {
@@ -102,7 +112,6 @@ func (s *NowPlayingService) GetNowPlayingInfo() (NowPlayingData, error) {
 			length = 0
 		}
 
-		// If length is the max integer value, set it to 0 to prevent division errors.
 		if length == 9223372036854775807 {
 			length = 0
 		}
@@ -118,7 +127,7 @@ func (s *NowPlayingService) GetNowPlayingInfo() (NowPlayingData, error) {
 		}, nil
 	}
 
-	if runtime.GOOS == "darwin" {
+	if os == "darwin" {
 		parts := strings.SplitN(rawOutput, " by ", 2)
 
 		if len(parts) < 2 {
@@ -138,11 +147,11 @@ func (s *NowPlayingService) GetNowPlayingInfo() (NowPlayingData, error) {
 	return NowPlayingData{IsPlaying: false}, nil
 }
 
-// parseTime converts a string of microseconds to milliseconds.
 func parseTime(s string) (int64, error) {
 	val, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return 0, err
 	}
-	return val / 1000, nil // Convert microseconds to milliseconds
+	return val / 1000, nil
 }
+
