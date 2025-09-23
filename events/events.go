@@ -170,7 +170,7 @@ func subscribeToEvents(sessionID string, cfg config.Config) {
 	}
 }
 
-func handleEventSubNotification(msg map[string]any, cfg config.Config) {
+func handleEventSubNotification(msg map[string]any, _ config.Config) {
 	payload, ok := msg["payload"].(map[string]any)
 	if !ok {
 		return
