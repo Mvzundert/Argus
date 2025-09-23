@@ -44,7 +44,6 @@ func NewNowPlayingService() NowPlayingService {
 
 // GetNowPlayingInfo retrieves the current track information.
 func (s *nowPlayingServiceImpl) GetNowPlayingInfo() (NowPlayingData, error) {
-	// ... all your original implementation code here ...
 	dep := dependencies.GetNowPlayingDependency()
 	if dep == nil {
 		return NowPlayingData{}, fmt.Errorf("unsupported OS: %s", runtime.GOOS)
@@ -154,4 +153,3 @@ func parseTime(s string) (int64, error) {
 	}
 	return val / 1000, nil
 }
-
